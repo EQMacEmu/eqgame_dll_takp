@@ -48,7 +48,6 @@ bool ParseINIBool(const char* str)
 	return false;
 }
 
-#ifdef CPU_TIMER_FIX
 LARGE_INTEGER g_ProcessorSpeed;
 LARGE_INTEGER g_ProcessorTicks;
 
@@ -73,7 +72,33 @@ unsigned __int64 GetCpuSpeed2_Detour()
 	QueryPerformanceCounter(&g_ProcessorTicks);
 	return g_ProcessorSpeed.QuadPart;
 }
-#endif
+
+void InstallCPUTimebaseFixHooks()
+{
+	// CPU high clock speed overflow fix
+	if (enableCPUTimebaseFix)
+	{
+		// this is in eqgame.exe
+		Detour((PBYTE)0x00559BF4, (PBYTE)GetCpuTicks_Detour);
+
+		// these two are in eqgfx_dx8.dll
+		if (hEQGFXMod)
+		{
+			// there are two functions: GetCpuSpeed2 and GetCpuSpeed3
+			// the game calls both and compares the results usually to see which worked better, so we'll just override both to go to our new function
+			intptr_t cpuSpeed2 = (intptr_t)GetProcAddress(hEQGFXMod, "GetCpuSpeed2");
+			if (cpuSpeed2)
+			{
+				Detour((PBYTE)cpuSpeed2, (PBYTE)GetCpuSpeed2_Detour);
+			}
+			intptr_t cpuSpeed3 = (intptr_t)GetProcAddress(hEQGFXMod, "GetCpuSpeed3");
+			if (cpuSpeed3)
+			{
+				Detour((PBYTE)cpuSpeed3, (PBYTE)GetCpuSpeed2_Detour);
+			}
+		}
+	}
+}
 
 bool CtrlPressed()
 {
@@ -482,13 +507,6 @@ LRESULT WINAPI eqw_DefWindowProcA_Detour(HWND hWnd, UINT Msg, WPARAM wParam, LPA
 
 WORD savedDeviceGammaRamp[3][256];
 bool gamma_saved = false;
-void SetSpecialAmbient(DWORD val)
-{
-	// this is a pointer to the function in the gfx dll
-	DWORD* (__cdecl * s3dSetWorldSpecialAmbient)(int a1, DWORD * a2) = *(DWORD * (__cdecl*)(int a1, DWORD * a2))0x007F9888;
-	int* DisplayObject = (int*)0x007F9510;
-	s3dSetWorldSpecialAmbient(*DisplayObject, &val);
-}
 void DeviceGammaSave()
 {
 	HDC DC = GetDC(0);
@@ -561,26 +579,42 @@ void Hook_t3dInitializeDevice(HMODULE gfx_dll)
 	t3dInitializeDevice_Trampoline = (_t3dInitializeDevice)DetourWithTrampoline((void*)((uintptr_t)gfx_dll + 0x6DD80), t3dInitializeDevice_Detour, 7);
 }
 
-// to be notified when eqmain and gfx dll get loaded
-HMODULE WINAPI LoadLibraryA_Detour(LPCSTR lpLibFileName)
+void PatchEqMain()
 {
-	HMODULE hMod = LoadLibraryA_Trampoline(lpLibFileName);
-
-	if (!_stricmp("eqmain.dll", lpLibFileName))
+	HMODULE hMod = GetModuleHandleA("eqmain.dll");
+	if (hMod)
 	{
 		SkipLicense(hMod);
 		SkipSplash(hMod);
 	}
-	else if (!_stricmp("EQGfx_Dx8.DLL", lpLibFileName))
+}
+
+void PatchEqGfx()
+{
+	HMODULE hMod = GetModuleHandleA("EQGfx_Dx8.DLL");
+	hEQGFXMod = hMod;
+	if (hMod)
 	{
-		hEQGFXMod = hMod;
 		if (enableDeviceGammaRamp)
 		{
+			InstallCPUTimebaseFixHooks();
 			Hook_t3dInitializeDevice(hEQGFXMod);
 		}
 	}
+}
 
-	return hMod;
+void InstallEQWCallbacks()
+{
+	auto eqw = GetModuleHandle("eqw.dll");
+	FARPROC set_eqmain = eqw ? GetProcAddress(eqw, "SetEqMainInitFn") : nullptr;
+	FARPROC set_eqgfx = eqw ? GetProcAddress(eqw, "SetEqGfxInitFn") : nullptr;
+	if (!set_eqmain || !set_eqgfx) {
+		MessageBoxA(NULL, "Installation error", "eqw.dll is not compatible", MB_OK | MB_ICONERROR);
+		ExitProcess(1);
+	}
+	// Install the patch callbacks for eqmain.dll and eqgfx_dx8.dll.
+	reinterpret_cast<void(__stdcall*)(void(*)())>(set_eqmain)(PatchEqMain);
+	reinterpret_cast<void(__stdcall*)(void(*)())>(set_eqgfx)(PatchEqGfx);
 }
 
 void InitHooks()
@@ -593,37 +627,14 @@ void InitHooks()
 	GetINIString("eqgame_dll", "EnableFPSLimiter", "FALSE", buf, sizeof(buf), true);
 	enableFPSLimiter = ParseINIBool(buf);
 
-#ifdef CPU_TIMER_FIX
 	GetINIString("eqgame_dll", "DisableCpuTimebaseFix", "FALSE", buf, sizeof(buf), true);
 	enableCPUTimebaseFix = !ParseINIBool(buf);
 
-	// CPU high clock speed overflow fix
-	if (enableCPUTimebaseFix)
-	{
-		// this is in eqgame.exe
-		Detour((PBYTE)0x00559BF4, (PBYTE)GetCpuTicks_Detour);
+	// to patch eqmain.dll and eqgfx_dx8.dll when they're loaded
+	InstallEQWCallbacks();
 
-		// these two are in eqgfx_dx8.dll
-		HMODULE eqgfx_dll = LoadLibraryA("eqgfx_dx8.dll");
-		if (eqgfx_dll)
-		{
-			HINSTANCE heqGfxMod = GetModuleHandle("eqgfx_dx8.dll");
-
-			// there are two functions: GetCpuSpeed2 and GetCpuSpeed3
-			// the game calls both and compares the results usually to see which worked better, so we'll just override both to go to our new function
-			intptr_t cpuSpeed2 = (intptr_t)GetProcAddress(heqGfxMod, "GetCpuSpeed2");
-			if (cpuSpeed2)
-			{
-				Detour((PBYTE)cpuSpeed2, (PBYTE)GetCpuSpeed2_Detour);
-			}
-			intptr_t cpuSpeed3 = (intptr_t)GetProcAddress(heqGfxMod, "GetCpuSpeed3");
-			if (cpuSpeed3)
-			{
-				Detour((PBYTE)cpuSpeed3, (PBYTE)GetCpuSpeed2_Detour);
-			}
-		}
-	}
-#endif
+	// for alt-enter full screen stretch mode in eqw
+	ProcessKeyDown_Trampoline = (_ProcessKeyDown)DetourWithTrampoline((void*)EQ_FUNCTION_ProcessKeyDown, (void*)ProcessKeyDown_Detour, 6);
 
 	// for changing title to Client1, Client2, etc or /title:value
 	HMODULE eqw_dll = GetModuleHandleA("eqw.dll");
@@ -631,9 +642,6 @@ void InitHooks()
 	{
 		DefWindowProcA_Trampoline = (_DefWindowProcA)DetourIAT(eqw_dll, "DefWindowProcA", eqw_DefWindowProcA_Detour);
 	}
-
-	// to patch eqmain.dll and eqgfx_dx8.dll when they're loaded
-	LoadLibraryA_Trampoline = (_LoadLibraryA)DetourIAT(hEQGameEXE, "LoadLibraryA", LoadLibraryA_Detour);
 
 	//bypass filename req
 	const unsigned char test3[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,0x90, 0xEB, 0x1B, 0x90, 0x90, 0x90, 0x90 };
@@ -685,9 +693,6 @@ void InitHooks()
 		CDisplay__Render_World_Trampoline = (_CDisplay__Render_World)DetourWithTrampoline((void*)0x004AA8BC, (void*)CDisplay__Render_World_Detour, 5);
 		LoadFPSLimiterIniSettings();
 	}
-
-	// for alt-enter full screen stretch mode in eqw
-	ProcessKeyDown_Trampoline = (_ProcessKeyDown)DetourWithTrampoline((void*)EQ_FUNCTION_ProcessKeyDown, (void*)ProcessKeyDown_Detour, 6);
 
 	// eqclient.ini file settings
 	{

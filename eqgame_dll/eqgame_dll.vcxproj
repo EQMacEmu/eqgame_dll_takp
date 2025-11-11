@@ -123,9 +123,6 @@
   <ItemGroup>
     <ResourceCompile Include="eqgame_dll.rc" />
   </ItemGroup>
-  <ItemGroup>
-    <Image Include="ak-logo.ico" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
