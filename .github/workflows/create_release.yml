@@ -21,7 +21,7 @@ jobs:
 
       - name: Build
         run: |
-          msbuild eqgame_dll.sln /p:Configuration=Release /p:Platform=x86
+          msbuild eqgame_dll.sln /p:Configuration=Release
 
       - name: Create the github release tag and upload artifacts
         uses: ncipollo/release-action@v1
