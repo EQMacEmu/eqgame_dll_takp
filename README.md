@@ -9,7 +9,7 @@ If you have an already existing install, make sure you have the scaling set righ
 Right click eqgame.exe, properties, compatibility tab, change DPI settings, check the box "Override high DPI scaling behavior" and select "Application" in the dropdown.
 
 Depending on your system, GPU, drivers, etc. you will most likely need a Direct3D 8 wrapper.  These are mods that work by placing a `d3d8.dll` file into the game directory.  Don't install these in the system directories.
-Try it without any `d3d8.dll`` file first to see if that works for you.  You may get drastically better or worse performance with or without a D3D8 mod and it's worth playing around with these even if seems to be working already.
+Try it without any `d3d8.dll` file first to see if that works for you.  You may get drastically better or worse performance with or without a D3D8 mod and it's worth playing around with these even if seems to be working already.
 - [dgVoodoo2](https://dege.freeweb.hu/dgVoodoo2/) - this is included in the TAKP 2.1 download.  It has some configuration options and is updated frequently by the author.  Try the latest version, maybe try old versions to isolate problems.
 - [d3d8to9](https://github.com/crosire/d3d8to9) - simpler, can work better in some cases.
 
