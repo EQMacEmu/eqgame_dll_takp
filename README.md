@@ -59,6 +59,9 @@ Adds some custom commands:
 - `/fps` - show an FPS indicator
 - `/raiddump` or `/outputfile raid` - write raid members to file `RaidRoster-%s.txt`
 
+### Desktop Gamma
+Adjusts the global desktop gamma ramp with the in game slider, a hack that was present in the old eqw.  Needs to be enabled in the ini file.
+
 ### FPS Limiter
 Enable this for an FPS limiter mod.  You may have better results using your GPU control panel or an app like RivaTuner, but this was available in the old eqgame and is brought over for feature parity.
 	The settings for this are under `Options`:
