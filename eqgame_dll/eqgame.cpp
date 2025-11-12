@@ -4,7 +4,6 @@
 #include "eqmac_functions.h"
 #include "hooks.h"
 
-#define CPU_TIMER_FIX // this was also added to eqw_takp but it works even if both are enabled
 #define INI_FILE "./eqclient.ini"
 
 // these settings are controlled through the INI file
@@ -527,7 +526,6 @@ void DeviceGammaRestore()
 void __stdcall D3D8_SetGammaRamp_Detour(DWORD pDevice, DWORD Flags, DWORD pRamp)
 {
 	if (!gamma_saved) DeviceGammaSave();
-	Log("D3D8_SetGammaRamp_Detour");
 	HDC DC = GetDC(0);
 	SetDeviceGammaRamp(DC, (LPVOID)pRamp);
 	ReleaseDC(0, DC);
@@ -537,7 +535,6 @@ typedef void(__stdcall* _D3D8_Reset)(DWORD pDevice, DWORD pPresentationParameter
 _D3D8_Reset D3D8_Reset_Trampoline;
 void __stdcall D3D8_Reset_Detour(DWORD pDevice, DWORD pPresentationParameters)
 {
-	Log("D3D8_Reset_Detour");
 	DeviceGammaRestore();
 	D3D8_Reset_Trampoline(pDevice, pPresentationParameters);
 }
@@ -548,7 +545,6 @@ void Hook_D3D8()
 	int ix_SetGammaRamp = 18;
 	int ix_Reset = 14;
 
-	Log("***Direct3D8_Object %08X", (DWORD)Direct3D8_obj);
 	if (Direct3D8_obj)
 	{
 		// SetGammaRamp
@@ -565,7 +561,6 @@ void Hook_D3D8()
 }
 int __cdecl t3dInitializeDevice_Detour(DWORD* a1, HWND hWnd, int a3, int* a4, int a5)
 {
-	Log("t3dInitializeDevice_Detour");
 	int ret = t3dInitializeDevice_Trampoline(a1, hWnd, a3, a4, a5);
 	if (ret == 0)
 	{
@@ -575,7 +570,6 @@ int __cdecl t3dInitializeDevice_Detour(DWORD* a1, HWND hWnd, int a3, int* a4, in
 }
 void Hook_t3dInitializeDevice(HMODULE gfx_dll)
 {
-	Log("Hook_t3dInitializeDevice");
 	t3dInitializeDevice_Trampoline = (_t3dInitializeDevice)DetourWithTrampoline((void*)((uintptr_t)gfx_dll + 0x6DD80), t3dInitializeDevice_Detour, 7);
 }
 
