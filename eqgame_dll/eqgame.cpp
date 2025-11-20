@@ -611,6 +611,13 @@ void InstallEQWCallbacks()
 	reinterpret_cast<void(__stdcall*)(void(*)())>(set_eqgfx)(PatchEqGfx);
 }
 
+// Reduce boot time by 5 to 7 seconds just by reducing a default sleep value in LoadWorld.
+void FastLoadWorldPatch() {
+	int patch_address = 0x004a8240;
+	BYTE new_sleep_time = 1;  // Default sleep time is 50 ms.
+	Patch((void *)patch_address, &new_sleep_time, 1);
+}
+
 void InitHooks()
 {
 	char buf[2048];
@@ -687,6 +694,9 @@ void InitHooks()
 		CDisplay__Render_World_Trampoline = (_CDisplay__Render_World)DetourWithTrampoline((void*)0x004AA8BC, (void*)CDisplay__Render_World_Detour, 5);
 		LoadFPSLimiterIniSettings();
 	}
+	
+	// Reduce boot time by 5 to 7 seconds just by reducing a default sleep value in LoadWorld.
+	FastLoadWorldPatch();
 
 	// eqclient.ini file settings
 	{
